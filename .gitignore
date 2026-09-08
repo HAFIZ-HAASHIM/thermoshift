@@ -1,0 +1,43 @@
+# Environment files
+.env
+.env.*
+!.env.example
+*.local
+frontend/.env.local
+backend/.env
+backend/.env.local
+
+# Node & Package Managers
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+optimizer/venv/
+
+# Editor & IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Generated/cache files
+.cache/
+tmp/
+temp/
+.tools/

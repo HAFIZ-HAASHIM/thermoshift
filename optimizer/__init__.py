@@ -1,0 +1,1 @@
+"""ThermoShift Optimizer root package"""

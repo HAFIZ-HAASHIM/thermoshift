@@ -1,0 +1,116 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 3728 >>
+stream
+BT
+/F1 9 Tf
+30 750 Td
+(THERMOSHIFT TEST PROJECT MASTER SCHEDULE) Tj
+0 -14 Td
+(Site: Phoenix Sector 4 | Project: Civil Infrastructure Expansion | Date: 2026-09-15) Tj
+0 -14 Td
+(================================================================================) Tj
+0 -14 Td
+(1. ACTIVITY SCHEDULE) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(ID     | Activity                                  | Zone     | Duration | Min Workers | Required Skills  | Predecessor | Deadline) Tj
+0 -14 Td
+(A-101  | Site clearing and debris segregation      | Sector 1 | 120 min  | 3           | Site Operations  | -           | 15 Sep 12:00) Tj
+0 -14 Td
+(A-102  | Stormwater trench excavation              | Sector 1 | 180 min  | 4           | Excavation       | A-101       | 16 Sep 15:00) Tj
+0 -14 Td
+(A-103  | HDPE drainage pipe installation           | Sector 1 | 150 min  | 3           | Pipe Installation| A-102       | 17 Sep 15:00) Tj
+0 -14 Td
+(A-104  | Compacted aggregate base preparation      | Sector 1 | 210 min  | 4           | Earthworks       | A-101       | 18 Sep 16:00) Tj
+0 -14 Td
+(A-105  | Rebar cage assembly                       | Sector 2 | 180 min  | 3           | Rebar Work       | A-104       | 21 Sep 14:00) Tj
+0 -14 Td
+(A-106  | Foundation concrete placement             | Sector 2 | 240 min  | 5           | Concrete Work    | A-105       | 22 Sep 16:00) Tj
+0 -14 Td
+(A-107  | Curing blanket installation               | Sector 2 | 90 min   | 2           | Concrete Work    | A-106       | 23 Sep 12:00) Tj
+0 -14 Td
+(A-108  | Perimeter lighting conduit installation   | Sector 3 | 180 min  | 2           | Electrical       | A-104       | 24 Sep 15:00) Tj
+0 -14 Td
+(A-109  | Safety barrier and access gate setup      | Sector 3 | 120 min  | 3           | Site Operations  | A-108       | 25 Sep 12:00) Tj
+0 -14 Td
+(A-110  | Final drainage inspection                 | Sector 1 | 90 min   | 2           | Inspection       | A-103       | 25 Sep 15:00) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(2. WORKFORCE REQUIREMENTS) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(- Site Operations: 6 workers available \(Trained for site logistics and barrier setup\)) Tj
+0 -14 Td
+(- Excavation: 5 workers available \(Trained for mechanical/manual excavation activities\)) Tj
+0 -14 Td
+(- Pipe Installation: 4 workers available \(Drainage and utility trench specialists\)) Tj
+0 -14 Td
+(- Earthworks: 5 workers available \(Heavy machinery and compaction operators\)) Tj
+0 -14 Td
+(- Rebar Work: 4 workers available \(Steel fixing and cage fabrication\)) Tj
+0 -14 Td
+(- Concrete Work: 6 workers available \(Pouring, leveling and curing specialists\)) Tj
+0 -14 Td
+(- Electrical: 3 workers available \(Conduit and wiring licensed technicians\)) Tj
+0 -14 Td
+(- Inspection: 2 workers available \(Quality and safety inspection officers\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(3. RESOURCE AVAILABILITY) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(- Shaded recovery station: capacity 2) Tj
+0 -14 Td
+(- Potable water station: capacity 4) Tj
+0 -14 Td
+(- Portable cooling unit: capacity 3) Tj
+0 -14 Td
+(- Plate compactor: capacity 1) Tj
+0 -14 Td
+(- Concrete pump: capacity 1) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(4. SCHEDULING NOTES) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(- All exterior activities subject to occupational heat-safety guidance.) Tj
+0 -14 Td
+(- Mandatory recovery breaks to be inserted by ThermoShift CP-SAT solver.) Tj
+0 -14 Td
+(- Peak solar hours \(11:00 - 14:00\) require strict WBGT monitoring.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000002400 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2500
+%%EOF

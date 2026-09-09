@@ -9,13 +9,13 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
 [![OR-Tools](https://img.shields.io/badge/Google_OR--Tools-CP--SAT-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://developers.google.com/optimization)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
-[![Tests](https://img.shields.io/badge/Tests-111%20Passed-success?style=for-the-badge&logo=pytest&logoColor=white)](optimizer/tests)
+[![Tests](https://img.shields.io/badge/Tests-131%20Passed-success?style=for-the-badge&logo=pytest&logoColor=white)](optimizer/tests)
 
 <p align="center">
   <b>A supervisor-facing decision-support system that generates mathematically optimal, heat-safe work-and-rest schedules for outdoor industrial sites under extreme thermal stress.</b>
 </p>
 
-[Key Features](#-key-features) • [Architecture](#-system-architecture) • [Optimization Engine](#-mathematical-optimization-engine) • [Quick Start](#-quick-start-guide) • [Safety Framework](#-occupational-safety-framework)
+[Key Features](#-key-features) • [Architecture](#-system-architecture) • [PDF Import Pipeline](#-ai-pdf-schedule-import--normalization) • [Optimization Engine](#-mathematical-optimization-engine) • [Quick Start](#-quick-start-guide) • [Safety Framework](#-occupational-safety-framework)
 
 ---
 
@@ -31,7 +31,7 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
 2. **Physiological Work-Rest Boundaries**: Dynamic break requirements scaled by metabolic workload intensity (light, moderate, heavy, severe) and sun exposure.
 3. **Trade Certification Matrix**: Multi-trade worker assignments (welding, electrical, heavy equipment, carpentry, masonry).
 4. **Physical Site Resource Caps**: Hard capacity limits on air-conditioned recovery trailers, hydration stations, and shade structures.
-5. **Project Milestone Precedence**: Task dependency graphs and strict target deadlines.
+5. **Project Milestone Precedence**: Task dependency graphs, durations, and target deadlines extracted directly from project PDFs.
 
 ```
        ENVIRONMENT                  WORKFORCE                   RESOURCES
@@ -61,6 +61,15 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
 <table>
   <tr>
     <td width="50%">
+      <h3>📄 AI PDF Schedule Import</h3>
+      <ul>
+        <li>Direct ingestion of real-world PDF construction & industrial schedules.</li>
+        <li>Multi-pass regex & LLM extraction of activities, crew sizes, durations, and dependencies.</li>
+        <li><b>Strict Normalization Layer</b>: Validates bounds, formats, and trades; highlights missing data with <code>needs_review</code> badges without crashing.</li>
+        <li><b>Human-in-the-Loop Review</b>: Supervisors review, edit, and confirm extracted activities before optimization.</li>
+      </ul>
+    </td>
+    <td width="50%">
       <h3>🌤️ Live Weather & WBGT Modeling</h3>
       <ul>
         <li>Direct integration with <b>Open-Meteo API</b> for live microclimate forecasting.</li>
@@ -68,6 +77,8 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
         <li>Solar radiation and wind-speed attenuation adjustments.</li>
       </ul>
     </td>
+  </tr>
+  <tr>
     <td width="50%">
       <h3>⚡ OR-Tools CP-SAT Optimizer</h3>
       <ul>
@@ -82,8 +93,6 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
         </li>
       </ul>
     </td>
-  </tr>
-  <tr>
     <td width="50%">
       <h3>🧪 "What-If" Counterfactual Engine</h3>
       <ul>
@@ -98,17 +107,43 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
         <li>Side-by-side delta visualization without database mutations.</li>
       </ul>
     </td>
-    <td width="50%">
+  </tr>
+  <tr>
+    <td colspan="2">
       <h3>🧠 Deterministic Decision Intelligence</h3>
       <ul>
         <li>Every schedule assignment includes an explainability trace:
           <code>Fact → Reason → Impact</code>.</li>
         <li>Supervisors receive clear justifications for why high-intensity tasks were shifted to morning hours or why specific recovery breaks were enforced.</li>
-        <li>Zero black-box decisions.</li>
+        <li>Zero black-box decisions — mathematical transparency from input to dispatch.</li>
       </ul>
     </td>
   </tr>
 </table>
+
+---
+
+## 📄 AI PDF Schedule Import & Normalization
+
+ThermoShift includes a resilient PDF schedule ingestion pipeline designed for real-world project schedules:
+
+```
+RAW PDF / LLM OUTPUT
+        ↓
+VALIDATE & SANITIZE (sanitizeTaskCandidate, sanitizeProjectMetadata, sanitizeWorkforceGroup, sanitizeResourceItem)
+        ↓
+SAFE STRUCTURED SCHEDULE (ExtractedTaskCandidate[] with predictable types & review flags)
+        ↓
+SUPERVISOR REVIEW SCREEN (Inline editing, dependency visualization, missing field alerts)
+        ↓
+DATABASE PERSISTENCE & DETERMINISTIC CP-SAT OPTIMIZER
+```
+
+### Ingestion Guarantees:
+- **Null-Safe String & Number Normalization**: Unsafe operations are protected through centralized type-safe helpers.
+- **Traceable Sourcing**: Tracks page references, text snippets, and confidence levels for every extracted task.
+- **Circular Dependency Detection**: Validates dependency DAGs and alerts the supervisor of cyclical prerequisites.
+- **No Fabricated Data**: Missing fields display explicit `"Needs Review"` indicators and require supervisor confirmation before solving.
 
 ---
 
@@ -118,8 +153,10 @@ Traditional manual shift scheduling fails when temperatures spike unpredictably.
 flowchart TB
     subgraph Client["Frontend Layer (React 18 + Vite + Tailwind CSS)"]
         UI[Operational Dashboard & Timeline]
+        PDFImport[AI PDF Schedule Import & Review]
         WhatIf[What-If Scenario Simulator]
         Roster[Roster & Resource Management]
+        Gantt[Interactive Gantt & Schedule Strip]
     end
 
     subgraph Service["Backend Services Layer"]
@@ -128,6 +165,7 @@ flowchart TB
     end
 
     subgraph Engine["Optimizer & Compute Core (Python 3.10+)"]
+        PDFParser["PDF Parser & Text Extractor"]
         Weather["Weather Ingestion & WBGT Engine"]
         CPSAT["Google OR-Tools CP-SAT Solver"]
         Explainer["Decision Intelligence Generator"]
@@ -138,9 +176,11 @@ flowchart TB
         OpenMeteo["Open-Meteo Weather API"]
     end
 
+    PDFImport -->|Upload PDF / Confirm| FastAPI
     UI -->|REST / JSON| FastAPI
     WhatIf -->|Simulate Request| FastAPI
     Roster -->|CRUD| Supabase
+    FastAPI -->|Extract Text| PDFParser
     FastAPI -->|Fetch Weather| OpenMeteo
     FastAPI -->|Invoke Model| CPSAT
     Weather --> CPSAT
@@ -177,7 +217,7 @@ $$\min \quad w_1 \cdot \text{Makespan} + w_2 \cdot \sum \text{HeatPenalties} + w
 ### Prerequisites
 - **Python 3.10+**
 - **Node.js 18+** & **npm**
-- **Supabase Account** (or local PostgreSQL instance)
+- **Supabase Account** (or local in-memory fallback)
 
 ---
 
@@ -209,11 +249,11 @@ source optimizer/venv/bin/activate
 # Install dependencies
 pip install -r optimizer/requirements.txt
 
-# Run the complete test suite (111 unit & integration tests)
-pytest
+# Run the complete test suite (131 unit, integration & import tests)
+pytest optimizer/tests/ -v
 
-# Launch the FastAPI Optimizer Engine
-uvicorn optimizer.engine.api:app --host 127.0.0.1 --port 8000 --reload
+# Launch the FastAPI Optimizer & PDF Extraction Engine
+python -m uvicorn optimizer.engine.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### 3. Launch Frontend Dashboard
@@ -224,31 +264,23 @@ npm install
 npm run dev
 ```
 
-The web dashboard will be active at **`http://localhost:5173`**.
+The web dashboard will be active at **`http://localhost:5173`** (or `http://localhost:3000`).
 
 ---
 
 ## 🧪 Comprehensive Verification Suite
 
-The repository contains an exhaustive test suite covering all thermal calculations, mathematical optimization models, API endpoints, and failure recoveries.
+The repository contains an exhaustive test suite covering PDF ingestion, thermal calculations, mathematical optimization models, scenario simulations, and decision intelligence.
 
 ```bash
-# Execute test suite with verbose coverage
-pytest -v
-```
+# Run all tests
+pytest optimizer/tests/ -v
 
-```text
-============================= test session starts =============================
-platform win32 -- Python 3.14.0, pytest-8.3.4, pluggy-1.5.0
-collected 111 items
+# Run PDF Import regression suite
+pytest optimizer/tests/test_pdf_import.py -v
 
-optimizer/tests/test_api.py ................................             [ 28%]
-optimizer/tests/test_counterfactuals.py ...................              [ 45%]
-optimizer/tests/test_explainer.py ................                       [ 60%]
-optimizer/tests/test_model.py .........................                  [ 82%]
-optimizer/tests/test_weather.py ....................                     [100%]
-
-============================= 111 passed in 177.34s ============================
+# Run Scenario Simulation suite
+pytest optimizer/tests/test_scenario_simulation.py -v
 ```
 
 ---
@@ -259,22 +291,27 @@ optimizer/tests/test_weather.py ....................                     [100%]
 thermoshift/
 ├── frontend/                  # React 18 + TypeScript + Vite Web Application
 │   ├── src/
-│   │   ├── components/        # Operational Timeline, Roster, What-If UI, Modals
-│   │   ├── services/          # Supabase Client & Optimizer API Integrations
-│   │   ├── types/             # Strict TypeScript Type Definitions
-│   │   └── utils/             # WBGT Helpers & Formatters
+│   │   ├── components/        # Operational Timeline, Roster, What-If UI, ScheduleImport
+│   │   │   ├── ScheduleImport/ # PDF Drag-and-Drop, Extraction Progress & Review Table
+│   │   │   ├── ErrorBoundary.tsx # Resilient Error Recovery Component
+│   │   │   └── ...
+│   │   ├── services/          # Supabase Client, Import API & Optimizer API Integrations
+│   │   ├── types/             # Strict TypeScript Definitions (Schedule, Import, Decision)
+│   │   └── utils/             # Formatters, Null-Safe String Handlers & WBGT Utilities
 ├── backend/                   # Node.js Express REST Backend Layer
 ├── optimizer/                 # Core Python Optimization Engine
 │   ├── engine/
 │   │   ├── api.py             # FastAPI REST Microservice
 │   │   ├── model.py           # Google OR-Tools CP-SAT Scheduling Formulation
+│   │   ├── schedule_importer.py # PDF Parsing & Structured Extraction Service
 │   │   ├── weather.py         # Open-Meteo & Stull/ISO-7243 WBGT Computation
 │   │   ├── explainer.py       # Deterministic Decision Intelligence Engine
 │   │   └── counterfactuals.py # What-If Simulation Engine
-│   └── tests/                 # 111 Automated Unit & Integration Tests
+│   └── tests/                 # 131 Automated Unit, Integration & PDF Import Tests
 ├── supabase/                  # Database Schemas, RLS Policies & Migrations
 │   ├── migrations/            # Relational PostgreSQL Table Definitions
 │   └── seed.sql               # Reference Development Dataset
+├── ThermoShift_Test_Project_Schedule.pdf # Test Construction Schedule Document
 └── README.md                  # Project Documentation
 ```
 

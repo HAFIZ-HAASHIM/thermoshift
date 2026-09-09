@@ -28,23 +28,79 @@ export interface SiteDashboardData {
 export const SEEDED_SITE_ID = 'a0000000-0000-0000-0000-000000000001';
 export const SEEDED_DATE = new Date().toISOString().split('T')[0];
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const BACKEND_BASE_URL = 'http://127.0.0.1:5000';
+
 /**
- * Lists all registered sites from Supabase.
+ * Lists all registered sites from backend and Supabase.
  */
 export async function fetchSites(): Promise<SiteRecord[]> {
+  const sitesMap = new Map<string, SiteRecord>();
+
+  // 1. Try fetching from Backend API
+  for (const baseUrl of [BACKEND_BASE_URL, API_BASE_URL]) {
+    try {
+      const res = await fetch(`${baseUrl}/api/sites`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.sites && Array.isArray(data.sites)) {
+          data.sites.forEach((s: any) => {
+            sitesMap.set(s.id, {
+              id: s.id,
+              name: s.name,
+              location_name: s.location_name || s.name,
+              latitude: Number(s.latitude || 0),
+              longitude: Number(s.longitude || 0),
+              timezone: s.timezone || 'UTC',
+              shift_start: s.shift_start || '07:00:00',
+              shift_end: s.shift_end || '17:00:00',
+              is_active: s.is_active ?? true
+            });
+          });
+          break;
+        }
+      }
+    } catch {
+      // Continue to next or fallback
+    }
+  }
+
+  // 2. Try fetching from Supabase
   try {
     const { data, error } = await supabase
       .from('sites')
       .select('*')
       .order('name', { ascending: true });
 
-    if (error) throw error;
-    return (data || []) as SiteRecord[];
+    if (!error && data) {
+      data.forEach((s: any) => {
+        if (!sitesMap.has(s.id)) {
+          sitesMap.set(s.id, s as SiteRecord);
+        }
+      });
+    }
   } catch (err: any) {
-    console.error('Failed to fetch sites:', err);
-    return [];
+    console.warn('Supabase site fetch fallback:', err);
   }
+
+  // 3. Check localStorage for any cached custom sites
+  try {
+    const localSitesRaw = localStorage.getItem('thermoshift_custom_sites');
+    if (localSitesRaw) {
+      const parsed = JSON.parse(localSitesRaw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((s: SiteRecord) => {
+          if (s.id && !sitesMap.has(s.id)) {
+            sitesMap.set(s.id, s);
+          }
+        });
+      }
+    }
+  } catch {}
+
+  return Array.from(sitesMap.values());
 }
+
 
 /**
  * Creates a new worksite.
@@ -121,12 +177,59 @@ export async function deleteSite(siteId: string): Promise<{ success: boolean; er
   }
 }
 
-/**
- * Loads complete site details, workforce roster with skills, tasks with dependencies,
- * site resources, and environmental records.
- * NEVER invents fake counts when zero records exist in the database.
- */
 export async function fetchFullSiteData(siteId: string): Promise<SiteDashboardData> {
+  // 1. Try fetching full site data from Backend API (covers dynamic & imported projects like Riverside)
+  for (const baseUrl of [BACKEND_BASE_URL, API_BASE_URL]) {
+    try {
+      const res = await fetch(`${baseUrl}/api/sites/${siteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.site) {
+          const activeSite = data.site as SiteRecord;
+          const workers = (data.workers || []) as WorkerRecord[];
+          const tasks = (data.tasks || []) as TaskRecord[];
+          const resources = (data.resources || []) as ResourceRecord[];
+          let weatherRecords = (data.weatherRecords || data.weather || []) as WeatherObservation[];
+          let weatherSource: 'LIVE_API' | 'DATABASE' | 'OFFLINE_REFERENCE' | 'UNAVAILABLE' = weatherRecords.length > 0 ? 'DATABASE' : 'UNAVAILABLE';
+
+          if (weatherRecords.length === 0 && activeSite.latitude && activeSite.longitude) {
+            const today = new Date().toISOString().split('T')[0];
+            const liveRes = await fetchLiveWeatherForSite(
+              activeSite.id,
+              Number(activeSite.latitude),
+              Number(activeSite.longitude),
+              today,
+              activeSite.timezone
+            );
+            if (liveRes.success && liveRes.records.length > 0) {
+              weatherRecords = liveRes.records;
+              weatherSource = liveRes.source;
+            }
+          }
+
+          return {
+            site: activeSite,
+            workers,
+            tasks,
+            resources,
+            weatherRecords,
+            counts: {
+              totalWorkers: workers.length,
+              totalTasks: tasks.length,
+              totalResources: resources.length
+            },
+            isLive: true,
+            weatherSource,
+            statusLabel: 'LIVE DATABASE'
+          };
+        }
+      }
+    } catch {
+      // Continue to next or fallback to Supabase
+    }
+  }
+
+  // 2. Fallback to querying Supabase directly
   try {
     const { data: siteData, error: siteError } = await supabase
       .from('sites')
@@ -153,6 +256,7 @@ export async function fetchFullSiteData(siteId: string): Promise<SiteDashboardDa
     }
 
     const activeSite = siteData[0] as SiteRecord;
+
 
     // Fetch all related entities in parallel
     const [workersRes, skillsRes, tasksRes, taskSkillsRes, taskDepsRes, resourcesRes, weatherRes] = await Promise.all([

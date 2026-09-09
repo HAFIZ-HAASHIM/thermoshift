@@ -95,7 +95,7 @@ export const PlanSetupCard: React.FC<PlanSetupCardProps> = ({
           </div>
 
           <div className="text-xs text-[#68736E] font-medium self-start sm:self-center">
-            {site?.name || 'Apex Commercial Tower'} · <span className="font-mono text-[#17211D]">{date}</span>
+            {site?.name || 'Current Site'} · <span className="font-mono text-[#17211D]">{date}</span>
           </div>
         </div>
 

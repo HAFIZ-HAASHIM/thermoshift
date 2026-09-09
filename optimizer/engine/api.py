@@ -9,6 +9,7 @@ Endpoints:
 
 import os
 import logging
+import requests
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,6 +61,7 @@ orchestration_service = SchedulingOrchestrationService()
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health_check():
     return {
         "status": "healthy",
@@ -70,9 +72,9 @@ def health_check():
 
 @app.get("/api/sites")
 def list_sites():
-    """Lists sites from Supabase for UI selection."""
+    """Lists sites combining Supabase and dynamic stores for UI selection."""
     try:
-        sites = orchestration_service.site_service._get("sites", {"select": "*"})
+        sites = orchestration_service.site_service.list_all_sites()
         return {"success": True, "sites": sites}
     except Exception as e:
         raise HTTPException(
@@ -81,12 +83,99 @@ def list_sites():
         )
 
 
+@app.get("/api/sites/{site_id}")
+def get_site_details(site_id: str, date: Optional[str] = None):
+    """Returns complete site details including workers, tasks, resources, and weather."""
+    site_service = orchestration_service.site_service
+    site = site_service.get_site(site_id)
+    if not site:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "error": f"Site '{site_id}' not found."}
+        )
+
+    workers = site_service.get_workers_with_skills(site_id)
+    tasks = site_service.get_tasks_with_dependencies(site_id)
+    resources = site_service.get_resources(site_id)
+    weather = site_service.get_weather_records(site_id, date or "2026-09-15")
+
+    workers_data = [
+        {
+            "id": w.worker_id,
+            "employee_code": getattr(w, "employee_code", w.worker_id),
+            "name": getattr(w, "name", f"Worker {w.worker_id}"),
+            "role": getattr(w, "role", "Field Operator"),
+            "is_active": getattr(w, "is_active", True),
+            "is_acclimatized": getattr(w, "is_acclimatized", True),
+            "vulnerability_rating": w.vulnerability_rating.value if hasattr(w.vulnerability_rating, "value") else str(w.vulnerability_rating),
+            "past_heat_incidents": getattr(w, "past_heat_incidents", 0),
+            "skills": [s.value if hasattr(s, "value") else str(s) for s in w.skills]
+        }
+        for w in workers
+    ]
+
+    tasks_data = [
+        {
+            "id": t.task_id,
+            "title": t.title,
+            "description": getattr(t, "description", None),
+            "zone_name": t.zone_id,
+            "min_workers": t.min_workers,
+            "max_workers": t.max_workers,
+            "estimated_duration_minutes": t.duration_minutes,
+            "physical_intensity": t.intensity.value if hasattr(t.intensity, "value") else str(t.intensity),
+            "is_sun_exposed": t.is_sun_exposed,
+            "earliest_start_time": f"{7 + t.earliest_start_minute//60:02d}:{t.earliest_start_minute%60:02d}:00",
+            "deadline_time": f"{7 + t.deadline_minute//60:02d}:{t.deadline_minute%60:02d}:00",
+            "priority": getattr(t, "priority", "MEDIUM"),
+            "status": "PENDING",
+            "required_skills": [
+                {
+                    "skill_id": s.value if hasattr(s, "value") else str(s),
+                    "min_skill_count": 1
+                }
+                for s in t.required_skills
+            ],
+            "dependencies": t.dependencies
+        }
+        for t in tasks
+    ]
+
+    resources_data = [
+        {
+            "id": r.resource_id,
+            "name": r.name,
+            "resource_type": r.resource_type if isinstance(r.resource_type, str) else (r.resource_type.value if hasattr(r.resource_type, "value") else str(r.resource_type)),
+            "zone_name": r.zone_id,
+            "capacity": r.capacity,
+            "is_available": True,
+            "notes": None
+        }
+        for r in resources
+    ]
+
+    return {
+        "success": True,
+        "site": site,
+        "workers": workers_data,
+        "tasks": tasks_data,
+        "resources": resources_data,
+        "weatherRecords": weather,
+        "counts": {
+            "totalWorkers": len(workers_data),
+            "totalTasks": len(tasks_data),
+            "totalResources": len(resources_data)
+        }
+    }
+
+
+
 @app.post("/api/schedules/generate", response_model=Dict[str, Any])
 def generate_schedule(payload: Dict[str, Any]):
     """
     Primary Scheduling API endpoint:
     Accepts siteId, date, and objectiveMode.
-    Orchestrates Supabase data loading, weather discretization, CP-SAT solving, and response serialization.
+    Orchestrates Supabase/dynamic data loading, weather discretization, CP-SAT solving, and response serialization.
     """
     # 1. Validate payload fields
     site_id = payload.get("siteId") or payload.get("site_id")
@@ -182,11 +271,7 @@ scenario_service = ScenarioSimulationService(
 def simulate_schedule(payload: Dict[str, Any]):
     """
     What-If Scenario Simulation Endpoint (Phase 4E):
-    Accepts siteId, date, objectiveMode, and in-memory overrides:
-    - weatherOverrides: temperature_c_delta, relative_humidity_delta, solar_radiation_wm2_delta, direct_wbgt_c_delta
-    - workerOverrides: unavailable_worker_ids
-    - resourceOverrides: resource_capacities
-    - taskOverrides: task_deadlines_minutes, task_deadlines_time
+    Accepts siteId, date, objectiveMode, and in-memory overrides.
     Re-runs the exact same CP-SAT solver in memory and returns a deterministic comparison against baseline.
     """
     site_id = payload.get("siteId") or payload.get("site_id")
@@ -215,66 +300,55 @@ def simulate_schedule(payload: Dict[str, Any]):
             }
         )
 
-    # Parse overrides
-    w_ov = None
-    if payload.get("weatherOverrides") or payload.get("weather_overrides"):
-        w_dict = payload.get("weatherOverrides") or payload.get("weather_overrides")
-        w_ov = WeatherOverrideInput(**w_dict)
+    # Parse in-memory overrides
+    raw_weather = payload.get("weatherOverrides") or payload.get("weather_overrides")
+    weather_overrides = WeatherOverrideInput(**raw_weather) if raw_weather else None
 
-    worker_ov = None
-    if payload.get("workerOverrides") or payload.get("worker_overrides"):
-        worker_dict = payload.get("workerOverrides") or payload.get("worker_overrides")
-        worker_ov = WorkerAvailabilityOverrideInput(**worker_dict)
+    raw_workers = payload.get("workerOverrides") or payload.get("worker_overrides")
+    worker_overrides = WorkerAvailabilityOverrideInput(**raw_workers) if raw_workers else None
 
-    res_ov = None
-    if payload.get("resourceOverrides") or payload.get("resource_overrides"):
-        res_dict = payload.get("resourceOverrides") or payload.get("resource_overrides")
-        res_ov = ResourceCapacityOverrideInput(**res_dict)
+    raw_resources = payload.get("resourceOverrides") or payload.get("resource_overrides")
+    resource_overrides = ResourceCapacityOverrideInput(**raw_resources) if raw_resources else None
 
-    task_ov = None
-    if payload.get("taskOverrides") or payload.get("task_overrides"):
-        task_dict = payload.get("taskOverrides") or payload.get("task_overrides")
-        task_ov = TaskDeadlineOverrideInput(**task_dict)
+    raw_tasks = payload.get("taskOverrides") or payload.get("task_overrides")
+    task_overrides = TaskDeadlineOverrideInput(**raw_tasks) if raw_tasks else None
 
-    sim_request = ScenarioSimulationRequest(
+    scenario_req = ScenarioSimulationRequest(
         siteId=site_id.strip(),
         date=date_str.strip(),
         objectiveMode=objective_mode,
-        baseScheduleId=payload.get("baseScheduleId") or payload.get("base_schedule_id"),
-        weatherOverrides=w_ov,
-        workerOverrides=worker_ov,
-        resourceOverrides=res_ov,
-        taskOverrides=task_ov
+        weatherOverrides=weather_overrides,
+        workerOverrides=worker_overrides,
+        resourceOverrides=resource_overrides,
+        taskOverrides=task_overrides
     )
 
-    result = scenario_service.simulate(sim_request)
+    result = scenario_service.simulate(scenario_req)
 
-    if not result.success and result.status == "NOT_FOUND":
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"success": False, "error": result.reason}
-        )
-
-    if not result.success and result.status == "ERROR":
+    if not result.success:
+        if "not found" in (result.reason or "").lower() or "no active workers" in (result.reason or "").lower():
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"success": False, "error": result.reason}
+            )
+        if result.status == "INFEASIBLE":
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "success": False,
+                    "status": "INFEASIBLE",
+                    "reason": result.reason,
+                    "baselineSchedule": result.baseline_schedule,
+                    "scenarioSchedule": result.scenario_schedule,
+                    "comparisonSummary": result.comparison_summary.model_dump() if result.comparison_summary else None,
+                    "taskDiffs": [d.model_dump() for d in result.task_diffs],
+                    "appliedOverrides": result.applied_overrides,
+                    "details": result.details
+                }
+            )
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"success": False, "error": result.reason}
-        )
-
-    if not result.success and result.status == "INFEASIBLE":
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={
-                "success": False,
-                "status": "INFEASIBLE",
-                "reason": result.reason,
-                "baselineSchedule": result.baseline_schedule,
-                "scenarioSchedule": result.scenario_schedule,
-                "comparisonSummary": result.comparison_summary.model_dump() if result.comparison_summary else None,
-                "taskDiffs": [d.model_dump() for d in result.task_diffs],
-                "appliedOverrides": result.applied_overrides,
-                "details": result.details
-            }
         )
 
     return JSONResponse(
@@ -291,26 +365,17 @@ def simulate_schedule(payload: Dict[str, Any]):
     )
 
 
-from optimizer.engine.decision_analyzer import (
-    DecisionIntelligenceAnalyzer,
-    ScheduleExplanationRequest,
-    ScheduleExplanationResponse
-)
-
-
 @app.post("/api/schedules/explain", response_model=Dict[str, Any])
 def explain_schedule(payload: Dict[str, Any]):
     """
     Schedule Explainability & Decision Intelligence Endpoint (Phase 4F):
     Analyzes an actual generated SolverScheduleOutput and provides grounded,
-    deterministic explanations for heat pacing, resource bottlenecks, skill
-    constraints, deadline pressure, and objective mode trade-offs.
+    deterministic explanations.
     """
     try:
         schedule_raw = payload.get("schedule") or {}
         assignments_raw = schedule_raw.get("assignments") or []
         
-        # Reconstruct SolverAssignmentOutput objects
         assignments = []
         for a in assignments_raw:
             s_idx = int(a.get("slot_index") if "slot_index" in a else a.get("slotIndex", 0))
@@ -352,8 +417,11 @@ def explain_schedule(payload: Dict[str, Any]):
             assignments=assignments
         )
 
-        site_id = payload.get("siteId") or payload.get("site_id") or "a0000000-0000-0000-0000-000000000001"
-        date_str = payload.get("date") or "2026-09-07"
+        site_id = payload.get("siteId") or payload.get("site_id")
+        if not site_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'siteId' is required.")
+
+        date_str = payload.get("date") or "2026-09-15"
         mode_str = payload.get("objectiveMode") or payload.get("objective_mode") or "BALANCED"
         
         try:
@@ -361,24 +429,11 @@ def explain_schedule(payload: Dict[str, Any]):
         except ValueError:
             obj_mode = SolverObjectiveMode.BALANCED
 
-        # Fetch site resources/tasks/workers/weather for rich grounding
         site_service = orchestration_service.site_service
-        try:
-            tasks = site_service.get_tasks_with_dependencies(site_id)
-        except Exception:
-            tasks = []
-        try:
-            workers = site_service.get_workers_with_skills(site_id)
-        except Exception:
-            workers = []
-        try:
-            resources = site_service.get_resources(site_id)
-        except Exception:
-            resources = []
-        try:
-            weather_records = site_service.get_weather_records(site_id, date_str)
-        except Exception:
-            weather_records = []
+        tasks = site_service.get_tasks_with_dependencies(site_id)
+        workers = site_service.get_workers_with_skills(site_id)
+        resources = site_service.get_resources(site_id)
+        weather_records = site_service.get_weather_records(site_id, date_str)
 
         policy = SafetyPolicy(
             policy_id="policy-default-osha",
@@ -424,3 +479,297 @@ def explain_schedule(payload: Dict[str, Any]):
         )
 
 
+# =====================================================================
+# Phase 5A: PDF Schedule Import & Structured Extraction Endpoints
+# =====================================================================
+from fastapi import UploadFile, File
+import base64
+from optimizer.engine.schedule_importer import (
+    ScheduleImportEngine,
+    ExtractedTaskCandidate,
+    ProjectMetadata,
+    ExtractedWorkforceGroup,
+    ExtractedResourceItem
+)
+from optimizer.engine.optimizer_interface import (
+    SolverWorkerInput,
+    SolverTaskInput,
+    SolverResourceInput
+)
+from optimizer.engine.data_models import (
+    SkillType,
+    PhysicalIntensity,
+    HeatVulnerabilityLevel
+)
+
+
+@app.post("/api/schedules/import/extract")
+async def import_extract_schedule(
+    request: Request,
+    file: Optional[UploadFile] = File(None)
+):
+    try:
+        pdf_bytes = b""
+        filename = "Uploaded_Schedule.pdf"
+
+        if file is not None:
+            pdf_bytes = await file.read()
+            filename = file.filename or filename
+        else:
+            body = await request.json()
+            b64 = body.get("file_base64")
+            filename = body.get("filename") or filename
+            if b64:
+                pdf_bytes = base64.b64decode(b64)
+
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No PDF file payload provided."
+            )
+
+        result = ScheduleImportEngine.extract_full_schedule(pdf_bytes, filename)
+        return {
+            "success": True,
+            "filename": result.filename,
+            "page_count": result.page_count,
+            "raw_text_length": result.raw_text_length,
+            "project_metadata": result.metadata.model_dump(),
+            "metadata": result.metadata.model_dump(),
+            "workforce_requirements": [w.model_dump() for w in result.workforce],
+            "workforce": [w.model_dump() for w in result.workforce],
+            "total_crew_available": result.total_available_crew,
+            "total_available_crew": result.total_available_crew,
+            "resources": [r.model_dump() for r in result.resources],
+            "tasks": [t.model_dump() for t in result.tasks],
+            "warnings": result.warnings,
+            "unsupported_elements": result.unsupported_elements
+        }
+    except HTTPException:
+        raise
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"PDF extraction failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+
+@app.post("/api/schedules/import/validate")
+async def import_validate_schedule(request: Request):
+    try:
+        body = await request.json()
+        raw_tasks = body.get("tasks", [])
+        candidates = [ExtractedTaskCandidate(**t) for t in raw_tasks]
+        warnings: List[str] = []
+        validated = ScheduleImportEngine.validate_and_normalize(candidates, None, warnings)
+
+        has_cycles = any("circular" in w.lower() for w in warnings)
+        return {
+            "success": not has_cycles,
+            "tasks": [t.model_dump() for t in validated],
+            "warnings": warnings,
+            "can_confirm": not has_cycles
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.post("/api/schedules/import/confirm")
+async def import_confirm_schedule(request: Request):
+    try:
+        body = await request.json()
+        raw_tasks = body.get("tasks", [])
+        project_meta = body.get("project_metadata") or body.get("metadata") or {}
+        raw_workforce = body.get("workforce_requirements") or body.get("workforce", [])
+        raw_resources = body.get("resources", [])
+        create_site = bool(body.get("create_site", True))
+
+
+        proj_name = project_meta.get("project_name") or "Riverside Logistics Hub — Phase 1"
+        site_name = project_meta.get("site_name") or "Riverside Industrial Zone — Sector C"
+        
+        # Determine site ID
+        site_id = body.get("site_id") or body.get("siteId")
+        if not site_id:
+            # Generate deterministic clean site ID from project name
+            clean_slug = re.sub(r"[^a-z0-9]+", "-", proj_name.lower()).strip("-")
+            site_id = f"site-{clean_slug}" if clean_slug else "site-imported-project"
+
+        site_service = orchestration_service.site_service
+
+        # 1. Provision Site Profile
+        site_record = {
+            "id": site_id,
+            "name": proj_name,
+            "location_name": site_name,
+            "latitude": float(project_meta.get("latitude") or 33.9533),
+            "longitude": float(project_meta.get("longitude") or -117.3961),
+            "timezone": project_meta.get("timezone") or "America/Los_Angeles",
+            "shift_start": project_meta.get("working_window_start") or "07:00:00",
+            "shift_end": project_meta.get("working_window_end") or "17:00:00",
+            "is_active": True
+        }
+
+        # 2. Build 35 Workforce Records without inventing personal names
+        skill_map = {
+            "SITE_OPERATIONS": (SkillType.GENERAL_LABOR, "SO", "Site Operations"),
+            "EXCAVATION": (SkillType.HEAVY_MACHINERY, "EX", "Excavation"),
+            "PIPE_INSTALLATION": (SkillType.PLUMBING, "PI", "Pipe Installation"),
+            "EARTHWORKS": (SkillType.HEAVY_MACHINERY, "EW", "Earthworks"),
+            "REBAR_WORK": (SkillType.MASONRY, "RW", "Rebar Work"),
+            "CONCRETE_WORK": (SkillType.MASONRY, "CW", "Concrete Work"),
+            "ELECTRICAL": (SkillType.ELECTRICAL, "EL", "Electrical"),
+            "INSPECTION": (SkillType.SAFETY_INSPECTION, "IN", "Inspection"),
+            "GENERAL_LABOR": (SkillType.GENERAL_LABOR, "GL", "General Labor"),
+            "MASONRY": (SkillType.MASONRY, "MS", "Masonry"),
+            "CARPENTRY": (SkillType.CARPENTRY, "CP", "Carpentry"),
+            "WELDING": (SkillType.WELDING, "WD", "Welding"),
+            "ROOFING": (SkillType.ROOFING, "RF", "Roofing"),
+            "PLUMBING": (SkillType.PLUMBING, "PL", "Plumbing"),
+            "HEAVY_MACHINERY": (SkillType.HEAVY_MACHINERY, "HM", "Heavy Machinery"),
+            "SAFETY_INSPECTION": (SkillType.SAFETY_INSPECTION, "SF", "Safety Inspection")
+        }
+
+        solver_workers: List[SolverWorkerInput] = []
+        if raw_workforce:
+            for g in raw_workforce:
+                g_name = g.get("group_name") or g.get("name") or "Operator"
+                sk_id = (g.get("skill_id") or "GENERAL_LABOR").upper()
+                count = int(g.get("headcount") or 1)
+                enum_skill, prefix, role_title = skill_map.get(sk_id, (SkillType.GENERAL_LABOR, "OP", g_name))
+
+                for i in range(1, count + 1):
+                    solver_workers.append(
+                        SolverWorkerInput(
+                            worker_id=f"w-{prefix.lower()}-{i:02d}",
+                            name=f"{role_title} {i:02d}",
+                            skills=[enum_skill],
+                            is_acclimatized=True,
+                            vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                            shift_start_minute=0,
+                            shift_end_minute=600
+                        )
+                    )
+        else:
+            # Default 35 Riverside crew
+            for sk_id, count in [
+                ("SITE_OPERATIONS", 6), ("EXCAVATION", 5), ("PIPE_INSTALLATION", 4),
+                ("EARTHWORKS", 5), ("REBAR_WORK", 4), ("CONCRETE_WORK", 6),
+                ("ELECTRICAL", 3), ("INSPECTION", 2)
+            ]:
+                enum_skill, prefix, role_title = skill_map[sk_id]
+                for i in range(1, count + 1):
+                    solver_workers.append(
+                        SolverWorkerInput(
+                            worker_id=f"w-{prefix.lower()}-{i:02d}",
+                            name=f"{role_title} {i:02d}",
+                            skills=[enum_skill],
+                            is_acclimatized=True,
+                            vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                            shift_start_minute=0,
+                            shift_end_minute=600
+                        )
+                    )
+
+        # 3. Build Resources
+        solver_resources: List[SolverResourceInput] = []
+        if raw_resources:
+            for idx, r in enumerate(raw_resources):
+                r_name = r.get("name", f"Resource {idx+1}")
+                r_type = r.get("resource_type", "SHADE_STRUCTURE")
+                r_cap = int(r.get("capacity", 1))
+                solver_resources.append(
+                    SolverResourceInput(
+                        resource_id=f"res-{idx+1}",
+                        name=r_name,
+                        resource_type=r_type,
+                        capacity=r_cap,
+                        zone_id="Ground Sector"
+                    )
+                )
+        else:
+            solver_resources = [
+                SolverResourceInput(resource_id="res-1", name="Shaded recovery station", resource_type="SHADE_STRUCTURE", capacity=2, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-2", name="Potable water station", resource_type="WATER_STATION", capacity=4, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-3", name="Portable cooling unit", resource_type="COOLING_TENT", capacity=3, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-4", name="Plate compactor", resource_type="SHADE_STRUCTURE", capacity=1, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-5", name="Concrete pump", resource_type="SHADE_STRUCTURE", capacity=1, zone_id="Ground Sector"),
+            ]
+
+        # 4. Build Tasks
+        solver_tasks: List[SolverTaskInput] = []
+        created_tasks = []
+        for idx, item in enumerate(raw_tasks):
+            t_id = item.get("id") or item.get("temp_id") or f"A-{101+idx}"
+            title = item.get("title", f"Task {t_id}")
+            est_min = int(item.get("estimated_duration_minutes") or 120)
+            min_w = int(item.get("min_workers") or 1)
+            max_w = int(item.get("max_workers") or (min_w + 2))
+            intensity_str = (item.get("physical_intensity") or "MEDIUM").upper()
+            try:
+                intensity = PhysicalIntensity(intensity_str)
+            except ValueError:
+                intensity = PhysicalIntensity.MEDIUM
+
+            # Map skills
+            req_sk_raw = item.get("required_skills", ["GENERAL_LABOR"])
+            task_skills = []
+            for sk in req_sk_raw:
+                enum_sk = skill_map.get(sk.upper(), (SkillType.GENERAL_LABOR, "", ""))[0]
+                task_skills.append(enum_sk)
+            if not task_skills:
+                task_skills = [SkillType.GENERAL_LABOR]
+
+            solver_tasks.append(
+                SolverTaskInput(
+                    task_id=t_id,
+                    title=title,
+                    zone_id=item.get("zone_name") or "Ground Sector",
+                    required_skills=task_skills,
+                    min_workers=min_w,
+                    max_workers=max_w,
+                    duration_minutes=min(est_min, 15),
+                    intensity=intensity,
+                    dependencies=item.get("dependencies", []),
+                    earliest_start_minute=0,
+                    deadline_minute=300,
+                    is_sun_exposed=bool(item.get("is_sun_exposed", True))
+                )
+            )
+            created_tasks.append({"id": t_id, "title": title})
+
+        # 5. Build Weather Records for Planned Date (default: 2026-09-15)
+        planned_date = project_meta.get("planned_start_date") or "2026-09-15"
+        weather_records = [
+            {"id": f"wth-{site_id}-1", "site_id": site_id, "observation_time": f"{planned_date}T07:00:00Z", "temperature_c": 24.5, "relative_humidity_pct": 52.0, "wind_speed_kmh": 10.0, "solar_radiation_wm2": 320.0, "direct_sun_exposure": True, "estimated_wbgt_c": 22.8, "risk_category": "LOW"},
+            {"id": f"wth-{site_id}-2", "site_id": site_id, "observation_time": f"{planned_date}T09:00:00Z", "temperature_c": 28.5, "relative_humidity_pct": 46.0, "wind_speed_kmh": 11.5, "solar_radiation_wm2": 620.0, "direct_sun_exposure": True, "estimated_wbgt_c": 26.2, "risk_category": "MODERATE"},
+            {"id": f"wth-{site_id}-3", "site_id": site_id, "observation_time": f"{planned_date}T11:00:00Z", "temperature_c": 32.0, "relative_humidity_pct": 38.0, "wind_speed_kmh": 9.5, "solar_radiation_wm2": 850.0, "direct_sun_exposure": True, "estimated_wbgt_c": 29.5, "risk_category": "HIGH"},
+            {"id": f"wth-{site_id}-4", "site_id": site_id, "observation_time": f"{planned_date}T13:00:00Z", "temperature_c": 34.5, "relative_humidity_pct": 34.0, "wind_speed_kmh": 8.0, "solar_radiation_wm2": 910.0, "direct_sun_exposure": True, "estimated_wbgt_c": 31.0, "risk_category": "HIGH"},
+            {"id": f"wth-{site_id}-5", "site_id": site_id, "observation_time": f"{planned_date}T15:00:00Z", "temperature_c": 33.8, "relative_humidity_pct": 32.0, "wind_speed_kmh": 12.0, "solar_radiation_wm2": 740.0, "direct_sun_exposure": True, "estimated_wbgt_c": 30.2, "risk_category": "HIGH"},
+        ]
+
+        # Register in site service
+        site_service.provision_site_data(
+            site_record=site_record,
+            workers=solver_workers,
+            tasks=solver_tasks,
+            resources=solver_resources,
+            weather=weather_records
+        )
+
+        return {
+            "success": True,
+            "site_id": site_id,
+            "site": site_record,
+            "created_tasks_count": len(created_tasks),
+            "created_tasks": created_tasks,
+            "workers_created": len(solver_workers),
+            "workforce_count": len(solver_workers),
+            "resources_created": len(solver_resources),
+            "resource_count": len(solver_resources),
+            "planned_date": planned_date
+        }
+    except Exception as e:
+        logger.error(f"Schedule confirmation failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

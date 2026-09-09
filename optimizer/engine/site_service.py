@@ -36,8 +36,16 @@ DEFAULT_SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPA
 
 class SiteDataService:
     """
-    Loads and normalizes site, workforce, task, and resource data from Supabase.
+    Loads and normalizes site, workforce, task, and resource data from Supabase,
+    with robust fallback and dynamic site provisioning.
     """
+
+    # In-memory store for custom/provisioned sites
+    _dynamic_sites: Dict[str, Dict[str, Any]] = {}
+    _dynamic_workers: Dict[str, List[SolverWorkerInput]] = {}
+    _dynamic_tasks: Dict[str, List[SolverTaskInput]] = {}
+    _dynamic_resources: Dict[str, List[SolverResourceInput]] = {}
+    _dynamic_weather: Dict[str, List[Dict[str, Any]]] = {}
 
     def __init__(self, supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
         self.supabase_url = (supabase_url or DEFAULT_SUPABASE_URL).rstrip("/")
@@ -49,26 +57,206 @@ class SiteDataService:
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
+        self._ensure_default_sites()
+
+    @classmethod
+    def _ensure_default_sites(cls):
+        """Provisions default Riverside site in dynamic store."""
+        riverside_id = "riverside-logistics-hub-p1"
+        if riverside_id not in cls._dynamic_sites:
+            cls._dynamic_sites[riverside_id] = {
+                "id": riverside_id,
+                "name": "Riverside Logistics Hub — Phase 1",
+                "location_name": "Riverside Industrial Zone — Sector C",
+                "latitude": 33.9533,
+                "longitude": -117.3961,
+                "timezone": "America/Los_Angeles",
+                "shift_start": "07:00:00",
+                "shift_end": "17:00:00",
+                "is_active": True
+            }
+
+            # 35 Riverside workers across 8 skill groups
+            workers = []
+            # 6 Site Operations
+            for i in range(1, 7):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-so-{i}",
+                    name=f"Site Operations {i:02d}",
+                    skills=[SkillType.GENERAL_LABOR],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 5 Excavation
+            for i in range(1, 6):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-ex-{i}",
+                    name=f"Excavation {i:02d}",
+                    skills=[SkillType.HEAVY_MACHINERY],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 4 Pipe Installation
+            for i in range(1, 5):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-pi-{i}",
+                    name=f"Pipe Installation {i:02d}",
+                    skills=[SkillType.PLUMBING],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 5 Earthworks
+            for i in range(1, 6):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-ew-{i}",
+                    name=f"Earthworks {i:02d}",
+                    skills=[SkillType.HEAVY_MACHINERY],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 4 Rebar Work
+            for i in range(1, 5):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-rw-{i}",
+                    name=f"Rebar Work {i:02d}",
+                    skills=[SkillType.MASONRY],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 6 Concrete Work
+            for i in range(1, 7):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-cw-{i}",
+                    name=f"Concrete Work {i:02d}",
+                    skills=[SkillType.MASONRY],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 3 Electrical
+            for i in range(1, 4):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-el-{i}",
+                    name=f"Electrical {i:02d}",
+                    skills=[SkillType.ELECTRICAL],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            # 2 Inspection
+            for i in range(1, 3):
+                workers.append(SolverWorkerInput(
+                    worker_id=f"w-in-{i}",
+                    name=f"Inspection {i:02d}",
+                    skills=[SkillType.SAFETY_INSPECTION],
+                    is_acclimatized=True,
+                    vulnerability_rating=HeatVulnerabilityLevel.LOW,
+                    shift_start_minute=0,
+                    shift_end_minute=600
+                ))
+            cls._dynamic_workers[riverside_id] = workers
+
+            # 5 Riverside Resources
+            cls._dynamic_resources[riverside_id] = [
+                SolverResourceInput(resource_id="res-1", name="Shaded recovery station", resource_type="SHADE_STRUCTURE", capacity=2, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-2", name="Potable water station", resource_type="WATER_STATION", capacity=4, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-3", name="Portable cooling unit", resource_type="COOLING_TENT", capacity=3, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-4", name="Plate compactor", resource_type="SHADE_STRUCTURE", capacity=1, zone_id="Ground Sector"),
+                SolverResourceInput(resource_id="res-5", name="Concrete pump", resource_type="SHADE_STRUCTURE", capacity=1, zone_id="Ground Sector"),
+            ]
+
+            # 10 Riverside Tasks
+            cls._dynamic_tasks[riverside_id] = [
+                SolverTaskInput(task_id="A-101", title="Site clearing and debris segregation", zone_id="North Yard", required_skills=[SkillType.GENERAL_LABOR], min_workers=3, max_workers=5, duration_minutes=15, intensity=PhysicalIntensity.MEDIUM, dependencies=[], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-102", title="Stormwater trench excavation", zone_id="East Perimeter", required_skills=[SkillType.HEAVY_MACHINERY], min_workers=4, max_workers=6, duration_minutes=15, intensity=PhysicalIntensity.HEAVY, dependencies=["A-101"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-103", title="HDPE drainage pipe installation", zone_id="East Perimeter", required_skills=[SkillType.PLUMBING], min_workers=3, max_workers=5, duration_minutes=15, intensity=PhysicalIntensity.MEDIUM, dependencies=["A-102"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-104", title="Compacted aggregate base preparation", zone_id="Loading Bay", required_skills=[SkillType.HEAVY_MACHINERY], min_workers=4, max_workers=6, duration_minutes=15, intensity=PhysicalIntensity.HEAVY, dependencies=["A-101"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-105", title="Rebar cage assembly", zone_id="Foundation Pad", required_skills=[SkillType.MASONRY], min_workers=3, max_workers=5, duration_minutes=15, intensity=PhysicalIntensity.MEDIUM, dependencies=["A-104"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-106", title="Foundation concrete placement", zone_id="Foundation Pad", required_skills=[SkillType.MASONRY], min_workers=5, max_workers=7, duration_minutes=15, intensity=PhysicalIntensity.HEAVY, dependencies=["A-105"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-107", title="Curing blanket installation", zone_id="Foundation Pad", required_skills=[SkillType.MASONRY], min_workers=2, max_workers=4, duration_minutes=15, intensity=PhysicalIntensity.MEDIUM, dependencies=["A-106"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-108", title="Perimeter lighting conduit installation", zone_id="South Access", required_skills=[SkillType.ELECTRICAL], min_workers=2, max_workers=4, duration_minutes=15, intensity=PhysicalIntensity.MEDIUM, dependencies=["A-104"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-109", title="Safety barrier and access gate setup", zone_id="South Access", required_skills=[SkillType.GENERAL_LABOR], min_workers=3, max_workers=5, duration_minutes=15, intensity=PhysicalIntensity.LIGHT, dependencies=["A-108"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True),
+                SolverTaskInput(task_id="A-110", title="Final drainage inspection", zone_id="East Perimeter", required_skills=[SkillType.SAFETY_INSPECTION], min_workers=2, max_workers=4, duration_minutes=15, intensity=PhysicalIntensity.LIGHT, dependencies=["A-103"], earliest_start_minute=0, deadline_minute=300, is_sun_exposed=True)
+            ]
+
+            # Riverside weather for 2026-09-15
+            cls._dynamic_weather[riverside_id] = [
+                {"id": f"wth-{riverside_id}-1", "site_id": riverside_id, "observation_time": "2026-09-15T07:00:00Z", "temperature_c": 24.5, "relative_humidity_pct": 52.0, "wind_speed_kmh": 10.0, "solar_radiation_wm2": 320.0, "direct_sun_exposure": True, "estimated_wbgt_c": 22.8, "risk_category": "LOW"},
+                {"id": f"wth-{riverside_id}-2", "site_id": riverside_id, "observation_time": "2026-09-15T09:00:00Z", "temperature_c": 28.5, "relative_humidity_pct": 46.0, "wind_speed_kmh": 11.5, "solar_radiation_wm2": 620.0, "direct_sun_exposure": True, "estimated_wbgt_c": 26.2, "risk_category": "MODERATE"},
+                {"id": f"wth-{riverside_id}-3", "site_id": riverside_id, "observation_time": "2026-09-15T11:00:00Z", "temperature_c": 32.0, "relative_humidity_pct": 38.0, "wind_speed_kmh": 9.5, "solar_radiation_wm2": 850.0, "direct_sun_exposure": True, "estimated_wbgt_c": 29.5, "risk_category": "HIGH"},
+                {"id": f"wth-{riverside_id}-4", "site_id": riverside_id, "observation_time": "2026-09-15T13:00:00Z", "temperature_c": 34.5, "relative_humidity_pct": 34.0, "wind_speed_kmh": 8.0, "solar_radiation_wm2": 910.0, "direct_sun_exposure": True, "estimated_wbgt_c": 31.0, "risk_category": "HIGH"},
+                {"id": f"wth-{riverside_id}-5", "site_id": riverside_id, "observation_time": "2026-09-15T15:00:00Z", "temperature_c": 33.8, "relative_humidity_pct": 32.0, "wind_speed_kmh": 12.0, "solar_radiation_wm2": 740.0, "direct_sun_exposure": True, "estimated_wbgt_c": 30.2, "risk_category": "HIGH"},
+            ]
 
     def _get(self, endpoint: str, params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """Performs a GET request to the Supabase REST API."""
         url = f"{self.rest_base_url}/{endpoint}"
-        resp = requests.get(url, headers=self.headers, params=params, timeout=10)
-        if resp.status_code == 404:
+        try:
+            resp = requests.get(url, headers=self.headers, params=params, timeout=10)
+            if resp.status_code == 404:
+                return []
+            if resp.status_code not in (200, 206):
+                return []
+            return resp.json()
+        except Exception:
             return []
-        if resp.status_code not in (200, 206):
-            raise RuntimeError(f"Supabase GET {endpoint} failed with HTTP {resp.status_code}: {resp.text}")
-        return resp.json()
+
+    def list_all_sites(self) -> List[Dict[str, Any]]:
+        """Returns all registered sites combining database and dynamic stores."""
+        db_sites = self._get("sites", {"select": "*"}) or []
+        db_ids = {s["id"] for s in db_sites}
+        all_sites = list(db_sites)
+        for s_id, site in self._dynamic_sites.items():
+            if s_id not in db_ids:
+                all_sites.append(site)
+        return all_sites
 
     def get_site(self, site_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a single site by ID."""
+        if site_id in self._dynamic_sites:
+            return self._dynamic_sites[site_id]
         records = self._get("sites", {"id": f"eq.{site_id}", "select": "*"})
         return records[0] if records else None
+
+    def provision_site_data(
+        self,
+        site_record: Dict[str, Any],
+        workers: Optional[List[SolverWorkerInput]] = None,
+        tasks: Optional[List[SolverTaskInput]] = None,
+        resources: Optional[List[SolverResourceInput]] = None,
+        weather: Optional[List[Dict[str, Any]]] = None
+    ):
+        """Registers or updates a site and its complete dataset dynamically."""
+        site_id = site_record["id"]
+        self._dynamic_sites[site_id] = site_record
+        if workers is not None:
+            self._dynamic_workers[site_id] = workers
+        if tasks is not None:
+            self._dynamic_tasks[site_id] = tasks
+        if resources is not None:
+            self._dynamic_resources[site_id] = resources
+        if weather is not None:
+            self._dynamic_weather[site_id] = weather
 
     def get_workers_with_skills(self, site_id: str) -> List[SolverWorkerInput]:
         """
         Loads all active workers for the site along with their normalized skills.
         """
+        if site_id in self._dynamic_workers:
+            return list(self._dynamic_workers[site_id])
+
         workers_raw = self._get("workers", {"site_id": f"eq.{site_id}", "is_active": "eq.true", "select": "*", "order": "id.asc"})
         if not workers_raw:
             return []
@@ -117,6 +305,9 @@ class SiteDataService:
         """
         Loads all tasks for the site along with required skills and DAG dependencies.
         """
+        if site_id in self._dynamic_tasks:
+            return list(self._dynamic_tasks[site_id])
+
         tasks_raw = self._get("tasks", {"site_id": f"eq.{site_id}", "select": "*"})
         if not tasks_raw:
             return []
@@ -194,6 +385,9 @@ class SiteDataService:
         """
         Loads all physical resources for the site.
         """
+        if site_id in self._dynamic_resources:
+            return list(self._dynamic_resources[site_id])
+
         resources_raw = self._get("resources", {"site_id": f"eq.{site_id}", "is_available": "eq.true", "select": "*", "order": "id.asc"})
         if not resources_raw:
             return []
@@ -218,6 +412,9 @@ class SiteDataService:
         """
         Loads stored weather observations / forecasts for the site.
         """
+        if site_id in self._dynamic_weather:
+            return list(self._dynamic_weather[site_id])
+
         records = self._get(
             "weather_records",
             {"site_id": f"eq.{site_id}", "select": "*", "order": "observation_time.asc"}

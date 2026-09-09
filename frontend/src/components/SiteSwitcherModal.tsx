@@ -248,7 +248,7 @@ export const SiteSwitcherModal: React.FC<SiteSwitcherModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Apex Commercial Tower · Phase 2"
+                  placeholder="e.g. Riverside Logistics Hub · Phase 1"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -270,7 +270,7 @@ export const SiteSwitcherModal: React.FC<SiteSwitcherModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Phoenix, AZ (Sector 4B)"
+                  placeholder="e.g. Phoenix, AZ or Dubai, UAE"
                   value={locationName}
                   onChange={(e) => setLocationName(e.target.value)}
                   required

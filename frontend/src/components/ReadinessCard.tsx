@@ -1,5 +1,6 @@
 import React from 'react';
 import { SiteDashboardData } from '../services/siteService';
+import { safeUpperCase, safeString } from '../utils/formatters';
 
 interface ReadinessCardProps {
   dashboardData: SiteDashboardData | null;
@@ -23,21 +24,24 @@ export const ReadinessCard: React.FC<ReadinessCardProps> = ({
   }
 
   const { workers, tasks, resources, weatherRecords } = dashboardData;
-  const activeWorkers = workers.filter((w) => w.is_active);
-  const activeResources = resources.filter((r) => r.is_available);
+  const activeWorkers = (workers || []).filter((w) => w.is_active);
+  const activeResources = (resources || []).filter((r) => r.is_available);
 
   // Skill coverage validation
   const missingSkills: string[] = [];
   const workerSkillSet = new Set<string>();
   activeWorkers.forEach((w) => {
-    (w.skills || []).forEach((s) => workerSkillSet.add(s.toUpperCase()));
+    (w.skills || []).forEach((s) => {
+      const upper = safeUpperCase(s);
+      if (upper) workerSkillSet.add(upper);
+    });
     workerSkillSet.add('GENERAL_LABOR');
   });
 
-  tasks.forEach((t) => {
+  (tasks || []).forEach((t) => {
     (t.required_skills || []).forEach((req) => {
-      const skillName = req.skill_id.toUpperCase();
-      if (skillName !== 'GENERAL_LABOR' && !workerSkillSet.has(skillName)) {
+      const skillName = safeUpperCase(req?.skill_id);
+      if (skillName && skillName !== 'GENERAL_LABOR' && !workerSkillSet.has(skillName)) {
         if (!missingSkills.includes(req.skill_id)) {
           missingSkills.push(req.skill_id);
         }

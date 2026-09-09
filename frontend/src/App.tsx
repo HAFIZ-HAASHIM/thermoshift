@@ -33,7 +33,10 @@ import { SiteSwitcherModal } from './components/SiteSwitcherModal';
 import { WorkforceManagement } from './components/WorkforceManagement';
 import { TaskManagement } from './components/TaskManagement';
 import { ResourceManagement } from './components/ResourceManagement';
+import { ScheduleImportView } from './components/ScheduleImport/ScheduleImportView';
 import { ScheduleExplanationResponse } from './types/decision_intelligence';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { safeContainsIgnoreCase } from './utils/formatters';
 
 export const App: React.FC = () => {
   const [sites, setSites] = useState<SiteRecord[]>([]);
@@ -88,11 +91,17 @@ export const App: React.FC = () => {
       setIsBackendHealthy(health.healthy);
 
       if (allSites.length > 0) {
-        // If current active site exists in list, keep it; otherwise pick first
+        const storedSiteId = localStorage.getItem('thermoshift_active_site_id');
         setActiveSite((prev) => {
           if (prev && allSites.find((s) => s.id === prev.id)) return prev;
-          const seeded = allSites.find((s) => s.id === SEEDED_SITE_ID);
-          return seeded || allSites[0];
+          if (storedSiteId) {
+            const foundStored = allSites.find((s) => s.id === storedSiteId);
+            if (foundStored) return foundStored;
+          }
+          // Check if Riverside Logistics Hub exists
+          const riverside = allSites.find((s) => safeContainsIgnoreCase(s?.name, 'riverside') || s.id === 'site-riverside-logistics-01');
+          if (riverside) return riverside;
+          return null;
         });
       }
     } catch (err) {
@@ -119,12 +128,14 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     if (activeSite?.id) {
+      localStorage.setItem('thermoshift_active_site_id', activeSite.id);
       loadActiveSiteData(activeSite.id);
       resetSchedule();
       setSimulationResult(null);
       setSimulationExplanation(null);
     }
   }, [activeSite?.id, selectedDate]);
+
 
   // 3. Fetch explainability whenever schedule updates
   useEffect(() => {
@@ -488,7 +499,35 @@ export const App: React.FC = () => {
             </div>
           )
         )}
+
+        {/* TAB 5: IMPORT SCHEDULE (Phase 5A) */}
+        {activeTab === 'import' && (
+          <ErrorBoundary fallbackTitle="PDF Schedule Import Error">
+            <ScheduleImportView
+              activeSite={activeSite}
+              availableSkills={[]}
+              onSiteChanged={(newSite) => {
+                setActiveSite(newSite);
+                setSelectedDate('2026-09-15');
+                loadSitesList();
+                loadActiveSiteData(newSite.id);
+              }}
+              onScheduleImported={() => {
+                loadSitesList();
+                if (activeSite) loadActiveSiteData(activeSite.id);
+              }}
+              onGeneratePlan={() => {
+                setActiveTab('dashboard');
+                setSelectedDate('2026-09-15');
+                if (activeSite) {
+                  generateSchedule(activeSite.id, '2026-09-15', true);
+                }
+              }}
+            />
+          </ErrorBoundary>
+        )}
       </main>
+
 
       {/* 3. Site Switcher Modal */}
       <SiteSwitcherModal

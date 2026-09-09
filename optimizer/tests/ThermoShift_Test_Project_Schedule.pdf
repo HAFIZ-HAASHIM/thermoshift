@@ -1,0 +1,134 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 3847 >>
+stream
+BT
+/F1 9 Tf
+50 750 Td
+12 TL
+(THERMOSHIFT MASTER SCHEDULE) Tj
+T*
+(Project: Riverside Logistics Hub - Phase 1) Tj
+T*
+(Project ID: RLH-P1-2026) Tj
+T*
+(Site: Riverside Industrial Zone - Sector C) Tj
+T*
+(Schedule Version: Rev 03) Tj
+T*
+(Planned Start: 15 September 2026) Tj
+T*
+(Planned Finish: 25 September 2026) Tj
+T*
+(Working Window: 07:00-17:00) Tj
+T*
+(Prepared By: Northstar Civil & Infrastructure) Tj
+T*
+(================================================================================) Tj
+T*
+(SECTION 1:) Tj
+T*
+(Activity Schedule) Tj
+T*
+(--------------------------------------------------------------------------------) Tj
+T*
+(ID     | Activity                                  | Zone            | Duration | Min Workers | Required Skills  | Predecessor | Deadline) Tj
+T*
+(A-101  | Site clearing and debris segregation      | North Yard      | 120 min  | 3           | Site Operations  | -           | 15 Sep 12:00) Tj
+T*
+(A-102  | Stormwater trench excavation              | East Perimeter  | 180 min  | 4           | Excavation       | A-101       | 16 Sep 15:00) Tj
+T*
+(A-103  | HDPE drainage pipe installation           | East Perimeter  | 150 min  | 3           | Pipe Installation| A-102       | 17 Sep 15:00) Tj
+T*
+(A-104  | Compacted aggregate base preparation      | Loading Bay     | 210 min  | 4           | Earthworks       | A-101       | 18 Sep 16:00) Tj
+T*
+(A-105  | Rebar cage assembly                       | Foundation Pad  | 180 min  | 3           | Rebar Work       | A-104       | 21 Sep 14:00) Tj
+T*
+(A-106  | Foundation concrete placement             | Foundation Pad  | 240 min  | 5           | Concrete Work    | A-105       | 22 Sep 16:00) Tj
+T*
+(A-107  | Curing blanket installation               | Foundation Pad  | 90 min   | 2           | Concrete Work    | A-106       | 23 Sep 12:00) Tj
+T*
+(A-108  | Perimeter lighting conduit installation   | South Access    | 180 min  | 2           | Electrical       | A-104       | 24 Sep 15:00) Tj
+T*
+(A-109  | Safety barrier and access gate setup      | South Access    | 120 min  | 3           | Site Operations  | A-108       | 25 Sep 12:00) Tj
+T*
+(A-110  | Final drainage inspection                 | East Perimeter  | 90 min   | 2           | Inspection       | A-103       | 25 Sep 15:00) Tj
+T*
+(SECTION 2:) Tj
+T*
+(Workforce Requirements) Tj
+T*
+(--------------------------------------------------------------------------------) Tj
+T*
+(- Site Operations: 6 workers available \(Trained for site logistics and barrier setup\)) Tj
+T*
+(- Excavation: 5 workers available \(Trained for mechanical/manual excavation activities\)) Tj
+T*
+(- Pipe Installation: 4 workers available \(Drainage and utility trench specialists\)) Tj
+T*
+(- Earthworks: 5 workers available \(Heavy machinery and compaction operators\)) Tj
+T*
+(- Rebar Work: 4 workers available \(Steel fixing and cage fabrication\)) Tj
+T*
+(- Concrete Work: 6 workers available \(Pouring, leveling and curing specialists\)) Tj
+T*
+(- Electrical: 3 workers available \(Conduit and wiring licensed technicians\)) Tj
+T*
+(- Inspection: 2 workers available \(Quality and safety inspection officers\)) Tj
+T*
+(SECTION 3:) Tj
+T*
+(Resource Availability) Tj
+T*
+(--------------------------------------------------------------------------------) Tj
+T*
+(- Shaded recovery station: capacity 2) Tj
+T*
+(- Potable water station: capacity 4) Tj
+T*
+(- Portable cooling unit: capacity 3) Tj
+T*
+(- Plate compactor: capacity 1) Tj
+T*
+(- Concrete pump: capacity 1) Tj
+T*
+(SECTION 4:) Tj
+T*
+(Scheduling Notes) Tj
+T*
+(--------------------------------------------------------------------------------) Tj
+T*
+(- All exterior activities subject to occupational heat-safety guidance.) Tj
+T*
+(- Mandatory recovery breaks to be inserted by ThermoShift CP-SAT solver.) Tj
+T*
+(- Peak solar hours \(11:00 - 14:00\) require strict WBGT monitoring.) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000500 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+600
+%%EOF

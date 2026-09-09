@@ -1,8 +1,8 @@
 import React from 'react';
-import { SlidersHorizontal, MapPin, Calendar, Users, ClipboardList, Tent, LayoutDashboard } from 'lucide-react';
+import { SlidersHorizontal, MapPin, Calendar, Users, ClipboardList, Tent, LayoutDashboard, FileUp } from 'lucide-react';
 import { SiteRecord } from '../types/schedule';
 
-export type AppTab = 'dashboard' | 'workforce' | 'tasks' | 'resources' | 'whatif';
+export type AppTab = 'dashboard' | 'workforce' | 'tasks' | 'resources' | 'whatif' | 'import';
 
 interface HeaderProps {
   activeSite: SiteRecord | null;
@@ -290,6 +290,41 @@ export const Header: React.FC<HeaderProps> = ({
               }}
             >
               {resourceCount}
+            </span>
+          </button>
+
+          {/* Import Schedule Tab (Phase 5A) */}
+          <button
+            onClick={() => onSelectTab('import')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.65rem 1rem',
+              fontSize: '0.825rem',
+              fontWeight: activeTab === 'import' ? 700 : 500,
+              color: activeTab === 'import' ? '#2F6B55' : '#66736D',
+              borderBottom: activeTab === 'import' ? '2px solid #2F6B55' : '2px solid transparent',
+              background: 'none',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <FileUp size={14} />
+            <span>Import Schedule</span>
+            <span
+              style={{
+                fontSize: '0.65rem',
+                backgroundColor: '#E8EFEA',
+                color: '#2F6B55',
+                padding: '1px 4px',
+                borderRadius: '4px',
+                fontWeight: 700
+              }}
+            >
+              AI
             </span>
           </button>
         </div>

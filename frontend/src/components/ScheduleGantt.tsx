@@ -18,6 +18,7 @@ import {
   TaskRecord,
   WeatherObservation
 } from '../types/schedule';
+import { safeLowerCase, safeContainsIgnoreCase } from '../utils/formatters';
 
 interface ScheduleGanttProps {
   schedule: ScheduleOutput;
@@ -130,9 +131,9 @@ export const ScheduleGantt: React.FC<ScheduleGanttProps> = ({
   // Filter workers list
   const filteredWorkers = effectiveWorkers.filter((w) => {
     const matchesSearch =
-      (w.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (w.employee_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (w.role || '').toLowerCase().includes(searchQuery.toLowerCase());
+      safeContainsIgnoreCase(w.name, searchQuery) ||
+      safeContainsIgnoreCase(w.employee_code, searchQuery) ||
+      safeContainsIgnoreCase(w.role, searchQuery);
 
     const matchesTrade =
       tradeFilter === 'ALL' ||
@@ -227,7 +228,7 @@ export const ScheduleGantt: React.FC<ScheduleGanttProps> = ({
               <option value="ALL">All Trades</option>
               {allTrades.map((t) => (
                 <option key={t} value={t} className="capitalize">
-                  {t.toLowerCase()}
+                  {safeLowerCase(t)}
                 </option>
               ))}
             </select>
